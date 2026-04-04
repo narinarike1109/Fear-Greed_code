@@ -5,22 +5,30 @@ from datetime import datetime, timezone, timedelta
 JST = timezone(timedelta(hours=9))
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-def get_fear_greed():
-    today = datetime.now(JST).strftime("%Y-%m-%d")
-    url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{today}"
-
-    r = requests.get(url, headers=HEADERS, timeout=10)
+def get_vix():
+    url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EVIX"
+    r = requests.get(url, timeout=10)
     r.raise_for_status()
+
     data = r.json()
 
-    score = data["fear_and_greed"]["score"]
-    rating = data["fear_and_greed"]["rating"]
+    vix = data["quoteResponse"]["result"][0]["regularMarketPrice"]
+    return vix
 
-    return score, rating
+
+def judge(vix):
+
+    if vix >= 45:
+        return "💀 PANIC BUY (SOXL)"
+    elif vix >= 35:
+        return "🔥 STRONG BUY (SOXL)"
+    elif vix >= 25:
+        return "⚠️ BUY ZONE (SOXL)"
+    elif vix <= 15:
+        return "💰 TAKE PROFIT ZONE"
+    else:
+        return "🙂 NORMAL"
+
 
 def send_discord(msg):
     r = requests.post(
@@ -30,17 +38,26 @@ def send_discord(msg):
     )
     r.raise_for_status()
 
+
 def main():
-    score, rating = get_fear_greed()
+
+    vix = get_vix()
+
+    state = judge(vix)
+
     now = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
 
-    msg = f"""Fear & Greed Daily
+    msg = f"""
+VIX Monitor
 
 time: {now}
-score: {score}
-state: {rating}
+VIX: {vix}
+
+{state}
 """
+
     send_discord(msg)
+
 
 if __name__ == "__main__":
     main()
