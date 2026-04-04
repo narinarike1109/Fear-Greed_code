@@ -41,6 +41,11 @@ def get_fred_latest_two(series_id: str):
     return latest_value, latest_date, previous_value
 
 
+def get_vix():
+    vix, _, _ = get_fred_latest_two("VIXCLS")
+    return vix
+
+
 def get_nasdaq100():
     latest, market_date, previous = get_fred_latest_two("NASDAQ100")
 
@@ -61,7 +66,6 @@ def get_fear_greed():
     r.raise_for_status()
     text = r.text
 
-    # まずは "current value" 周辺をざっくり探す
     patterns = [
         r"current value of the Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
         r"Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
@@ -73,12 +77,23 @@ def get_fear_greed():
         if m:
             value = int(m.group(1))
             state = m.group(2).strip().title()
-            return value, state, "unknown"
+            return value, state
 
     raise ValueError("Fear and Greed Value がページに見つからない")
 
 
-def judge(fg: int):
+def judge_vix(vix: float):
+    if vix >= 35:
+        return "💀 STRONG BUY"
+    elif vix >= 28:
+        return "🔥 BUY"
+    elif vix <= 18:
+        return "💰 TAKE PROFIT"
+    else:
+        return "🙂 NORMAL"
+
+
+def judge_fear_greed(fg: int):
     if fg < 20:
         return "💀 STRONG BUY"
     elif fg < 30:
@@ -101,25 +116,53 @@ def send_discord(message: str):
 
 
 def main():
-    fg, fg_state, fg_date = get_fear_greed()
-    nasdaq_price, nasdaq_change, nasdaq_date = get_nasdaq100()
-
     now = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
-    status = judge(fg)
 
-    msg = f"""Fear & Greed Monitor (SOXL)
-
+    # VIX
+    try:
+        vix = get_vix()
+        vix_status = judge_vix(vix)
+        vix_block = f"""■VIX Monitor
 time: {now}
+VIX: {vix:.2f}
+{vix_status}"""
+    except Exception as e:
+        vix_block = f"""■VIX Monitor
+time: {now}
+VIX: 取得失敗
+⚠️ FETCH FAILED ({str(e)})"""
 
+    # Fear & Greed
+    try:
+        fg, fg_state = get_fear_greed()
+        fg_status = judge_fear_greed(fg)
+        fg_block = f"""■Fear & Greed Monitor
+time: {now}
 Fear & Greed: {fg} ({fg_state})
-fg_date: {fg_date}
+{fg_status}"""
+    except Exception as e:
+        fg_block = f"""■Fear & Greed Monitor
+time: {now}
+Fear & Greed: 取得失敗
+⚠️ FETCH FAILED ({str(e)})"""
 
-NASDAQ100: {nasdaq_price:.2f}
+    # NASDAQ100
+    try:
+        _, nasdaq_change, market_date = get_nasdaq100()
+        nasdaq_block = f"""■NASDAQ100 Monitor
 change: {nasdaq_change:+.2f}%
-market_date: {nasdaq_date}
+market_date: {market_date}"""
+    except Exception as e:
+        nasdaq_block = f"""■NASDAQ100 Monitor
+change: 取得失敗
+market_date: unknown
+⚠️ FETCH FAILED ({str(e)})"""
 
-{status}
-"""
+    msg = f"""{vix_block}
+
+{fg_block}
+
+{nasdaq_block}"""
 
     send_discord(msg)
 
