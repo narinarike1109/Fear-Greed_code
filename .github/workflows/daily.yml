@@ -2,7 +2,7 @@ name: fear greed monitor
 
 on:
   schedule:
-    - cron: "0 22 * * *"   # JST 7:00
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
