@@ -63,27 +63,18 @@ def get_nasdaq100():
 
 def get_fear_greed():
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 
-    r = requests.get(FG_URL, headers=headers, timeout=15)
+    r = requests.get(url, timeout=15)
     r.raise_for_status()
 
-    text = r.text
+    data = r.json()
 
-    pattern = r"as of ([A-Za-z0-9 ,]+?) is (\d+)\s*-\s*([A-Za-z ]+)"
+    fg = data["fear_and_greed"]["score"]
+    fg_state = data["fear_and_greed"]["rating"]
+    fg_date = data["fear_and_greed"]["timestamp"]
 
-    m = re.search(pattern, text, re.IGNORECASE)
-
-    if not m:
-        raise ValueError("Fear and Greed Value not found")
-
-    date = m.group(1).strip()
-    value = int(m.group(2))
-    state = m.group(3).strip().title()
-
-    return value, state, date
+    return fg, fg_state, fg_date
 
 
 def judge_vix(vix):
