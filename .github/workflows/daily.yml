@@ -22,3 +22,4 @@ jobs:
       - run: python main.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
