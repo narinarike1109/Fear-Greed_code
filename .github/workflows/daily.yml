@@ -1,8 +1,8 @@
-name: fear greed daily
+name: vix monitor
 
 on:
   schedule:
-    - cron: "10 23 * * *"   # JST 7:00
+    - cron: "0 22 * * *"
   workflow_dispatch:
 
 jobs:
