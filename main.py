@@ -61,19 +61,21 @@ def get_fear_greed():
     r.raise_for_status()
     text = r.text
 
-    # 例:
-    # "The current value of the Fear & Greed Index as of April 2, 2026 is 15 - extreme fear."
-    pattern = r"The current value of the Fear & Greed Index as of (.*?) is (\d+)\s*-\s*([a-zA-Z ]+)\."
-    m = re.search(pattern, text, re.IGNORECASE)
+    # まずは "current value" 周辺をざっくり探す
+    patterns = [
+        r"current value of the Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
+        r"Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
+        r"(\d+)\s*-\s*(Extreme Fear|Fear|Neutral|Greed|Extreme Greed)",
+    ]
 
-    if not m:
-        raise ValueError("Fear & Greed value not found on page")
+    for pattern in patterns:
+        m = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if m:
+            value = int(m.group(1))
+            state = m.group(2).strip().title()
+            return value, state, "unknown"
 
-    market_date = m.group(1).strip()
-    value = int(m.group(2))
-    state = m.group(3).strip().title()
-
-    return value, state, market_date
+    raise ValueError("Fear and Greed Value がページに見つからない")
 
 
 def judge(fg: int):
