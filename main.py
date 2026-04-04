@@ -5,14 +5,15 @@ from datetime import datetime, timezone, timedelta
 JST = timezone(timedelta(hours=9))
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
-URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
 def get_fear_greed():
-    r = requests.get(URL, headers=HEADERS, timeout=10)
+    today = datetime.now(JST).strftime("%Y-%m-%d")
+    url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{today}"
+
+    r = requests.get(url, headers=HEADERS, timeout=10)
     r.raise_for_status()
     data = r.json()
 
