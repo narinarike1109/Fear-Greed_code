@@ -2,7 +2,7 @@ name: Market Daily Watch
 
 on:
   schedule:
-    - cron: '30 19 * * *'   # JST 04:30
+    - cron: '15 19 * * *'   # JST 04:30
   workflow_dispatch:
 
 jobs:
