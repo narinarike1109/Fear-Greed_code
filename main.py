@@ -23,12 +23,11 @@ TARGET_TICKERS = ["SPXL", "TECL", "SOXL"]
 JST = timezone(timedelta(hours=9))
 
 REQUEST_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Accept": "application/json",
     "Referer": "https://edition.cnn.com/markets/fear-and-greed",
     "Origin": "https://edition.cnn.com"
 }
-
 
 # =========================
 # Utilities
