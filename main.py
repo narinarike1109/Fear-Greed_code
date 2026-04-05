@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+import yfinance as yf
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 FRED_API_KEY = os.environ["FRED_API_KEY"]
@@ -81,6 +82,26 @@ def get_fear_greed():
     raise ValueError("Fear and Greed Value not found")
 
 
+def get_etf_change(symbol: str):
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period="5d", interval="1d", auto_adjust=False)
+
+    hist = hist.dropna(subset=["Close"])
+
+    if len(hist) < 2:
+        raise ValueError(f"Not enough price data for {symbol}")
+
+    latest = float(hist["Close"].iloc[-1])
+    previous = float(hist["Close"].iloc[-2])
+
+    if previous == 0:
+        change_pct = 0.0
+    else:
+        change_pct = ((latest - previous) / previous) * 100
+
+    return latest, change_pct
+
+
 def judge_vix(vix: float):
     if vix >= 35:
         return "💀 BUY NOW"
@@ -92,15 +113,15 @@ def judge_vix(vix: float):
 
 def judge_fear_greed(fg: int):
     if fg <= 10:
-        return "🚨 BUY NOW"
+        return "🚨 IMMEDIATE BUY NOW"
     elif fg <= 20:
-        return "🔥 BUY SETUP"
+        return "🔥 PREPARE BUY SETUP"
     elif fg <= 25:
         return "👀 BUY SIGNAL"
     elif fg >= 80:
         return "🚨 STRONG EXIT NOW"
     elif fg >= 75:
-        return "💰 SELL ZONE"
+        return "💰 TAKE PROFIT ZONE"
     else:
         return "🙂 WAIT"
 
@@ -118,9 +139,6 @@ def main():
     # VIX
     vix, vix_date = get_vix()
     vix_status = judge_vix(vix)
-
-    # NASDAQ100
-    _, nasdaq_change, market_date = get_nasdaq100()
 
     # Fear & Greed
     try:
@@ -141,6 +159,24 @@ Fear & Greed: {fg} ({fg_state})
 Fear & Greed: 取得失敗
 ⚠️ FETCH FAILED"""
 
+    # NASDAQ100
+    _, nasdaq_change, market_date = get_nasdaq100()
+
+    # Leveraged ETFs
+    try:
+        spxl_price, spxl_change = get_etf_change("SPXL")
+        soxl_price, soxl_change = get_etf_change("SOXL")
+        tecl_price, tecl_change = get_etf_change("TECL")
+
+        etf_block = f"""■Leveraged ETF Monitor
+SPXL: {spxl_price:.2f} ({spxl_change:+.2f}%)
+SOXL: {soxl_price:.2f} ({soxl_change:+.2f}%)
+TECL: {tecl_price:.2f} ({tecl_change:+.2f}%)"""
+    except Exception as e:
+        etf_block = f"""■Leveraged ETF Monitor
+取得失敗
+⚠️ FETCH FAILED ({str(e)})"""
+
     msg = f"""■VIX Monitor
 time: {vix_date}
 VIX: {vix:.2f}
@@ -151,6 +187,8 @@ VIX: {vix:.2f}
 ■NASDAQ100 Monitor
 change: {nasdaq_change:+.2f}%
 market_date: {market_date}
+
+{etf_block}
 """
 
     send_discord(msg)
