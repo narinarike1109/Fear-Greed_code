@@ -93,16 +93,18 @@ def judge_vix(vix: float):
 
 
 def judge_fear_greed(fg: int):
-    if fg < 20:
-        return "💀 STRONG BUY"
-    elif fg < 30:
-        return "🔥 BUY"
-    elif fg >= 85:
-        return "🚨 EXIT MARKET"
-    elif fg >= 70:
-        return "💰 TAKE PROFIT"
+    if fg <= 10:
+        return "🚨 BUY NOW"
+    elif fg <= 20:
+        return "🔥 BUY SETUP"
+    elif fg <= 25:
+        return "👀 BUY SIGNAL"
+    elif fg >= 80:
+        return "🚨 STRONG EXIT NOW"
+    elif fg >= 75:
+        return "💰 SELL ZONE"
     else:
-        return "🙂 NORMAL"
+        return "🙂 WAIT"
 
 
 def send_discord(message: str):
