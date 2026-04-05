@@ -5,18 +5,19 @@ from typing import Optional
 import requests
 import yfinance as yf
 
+
 # =========================
 # Environment Variables
 # =========================
 DISCORD_WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 FRED_API_KEY = os.environ["FRED_API_KEY"]
 
+
 # =========================
 # Constants
 # =========================
 CNN_FNG_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
-
 TARGET_TICKERS = ["SPXL", "TECL", "SOXL"]
 
 JST = timezone(timedelta(hours=9))
@@ -27,7 +28,7 @@ REQUEST_HEADERS = {
 
 
 # =========================
-# Common Utilities
+# Utilities
 # =========================
 def safe_float(value) -> Optional[float]:
     try:
@@ -43,25 +44,27 @@ def now_jst_str() -> str:
 # =========================
 # Fear & Greed
 # =========================
-def get_fear_greed_score() -> Optional[int]:
+def get_fear_greed_score() -> int:
     """
     CNN JSON endpoint から Fear & Greed score を取得
     """
-    try:
-        res = requests.get(CNN_FNG_URL, headers=REQUEST_HEADERS, timeout=15)
-        res.raise_for_status()
-        data = res.json()
+    res = requests.get(CNN_FNG_URL, headers=REQUEST_HEADERS, timeout=15)
+    res.raise_for_status()
 
-        score = data.get("fear_and_greed", {}).get("score")
-        score = safe_float(score)
-        if score is None:
-            raise ValueError("fear_and_greed.score not found")
+    data = res.json()
+    print(f"[DEBUG] F&G top-level keys: {list(data.keys())}")
 
-        return int(score)
+    fear_and_greed = data.get("fear_and_greed")
+    if not isinstance(fear_and_greed, dict):
+        raise ValueError(f"fear_and_greed block not found: {data}")
 
-    except Exception as e:
-        print(f"[ERROR] get_fear_greed_score failed: {e}")
-        return None
+    score = fear_and_greed.get("score")
+    score = safe_float(score)
+
+    if score is None:
+        raise ValueError(f"fear_and_greed.score not found: {fear_and_greed}")
+
+    return int(score)
 
 
 def judge_fear_greed(score: int) -> str:
@@ -83,9 +86,6 @@ def judge_fear_greed(score: int) -> str:
 # FRED
 # =========================
 def get_fred_latest_two(series_id: str):
-    """
-    FREDから最新値と1つ前の値を取得
-    """
     params = {
         "series_id": series_id,
         "api_key": FRED_API_KEY,
@@ -143,9 +143,6 @@ def get_nasdaq100():
 # ETF / RSI
 # =========================
 def calculate_rsi(close_series, period: int = 14) -> Optional[float]:
-    """
-    単純移動平均ベースのRSI
-    """
     if len(close_series) < period + 1:
         return None
 
@@ -166,42 +163,33 @@ def calculate_rsi(close_series, period: int = 14) -> Optional[float]:
 
 def get_etf_info(symbol: str):
     """
-    価格、前日比、RSI を取得
+    yfinance.Ticker().history() を使って価格、前日比、RSI を取得
     """
-    try:
-        hist = yf.download(
-            symbol,
-            period="1mo",
-            interval="1d",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period="1mo", interval="1d", auto_adjust=False)
 
-        if hist.empty or "Close" not in hist.columns:
-            raise ValueError(f"No price data for {symbol}")
+    print(f"[DEBUG] {symbol} hist columns: {list(hist.columns)}")
+    print(f"[DEBUG] {symbol} hist rows: {len(hist)}")
 
-        close = hist["Close"].dropna()
+    if hist.empty or "Close" not in hist.columns:
+        raise ValueError(f"No price data for {symbol}. columns={list(hist.columns)}")
 
-        if len(close) < 2:
-            raise ValueError(f"Not enough close data for {symbol}")
+    close = hist["Close"].dropna()
 
-        latest = float(close.iloc[-1])
-        previous = float(close.iloc[-2])
-        change_pct = 0.0 if previous == 0 else ((latest - previous) / previous) * 100
+    if len(close) < 2:
+        raise ValueError(f"Not enough close data for {symbol}. close_len={len(close)}")
 
-        rsi = calculate_rsi(close, period=14)
+    latest = float(close.iloc[-1])
+    previous = float(close.iloc[-2])
+    change_pct = 0.0 if previous == 0 else ((latest - previous) / previous) * 100
+    rsi = calculate_rsi(close, period=14)
 
-        return {
-            "symbol": symbol,
-            "price": latest,
-            "change_pct": change_pct,
-            "rsi": rsi,
-        }
-
-    except Exception as e:
-        print(f"[ERROR] get_etf_info({symbol}) failed: {e}")
-        return None
+    return {
+        "symbol": symbol,
+        "price": latest,
+        "change_pct": change_pct,
+        "rsi": rsi,
+    }
 
 
 def judge_rsi(rsi: Optional[float]) -> str:
@@ -239,7 +227,6 @@ def build_report() -> str:
     try:
         vix, vix_date = get_vix()
         vix_status = judge_vix(vix)
-
         report_lines.extend([
             "■VIX Monitor",
             f"time: {vix_date}",
@@ -252,25 +239,26 @@ def build_report() -> str:
         report_lines.extend([
             "■VIX Monitor",
             "取得失敗",
-            "⚠️ FETCH FAILED",
+            f"⚠️ FETCH FAILED ({str(e)})",
             ""
         ])
 
     # Fear & Greed
-    fg_score = get_fear_greed_score()
-    if fg_score is None:
-        report_lines.extend([
-            "■Fear & Greed Monitor",
-            "Fear & Greed: 取得失敗",
-            "⚠️ FETCH FAILED",
-            ""
-        ])
-    else:
+    try:
+        fg_score = get_fear_greed_score()
         fg_status = judge_fear_greed(fg_score)
         report_lines.extend([
             "■Fear & Greed Monitor",
             f"Fear & Greed: {fg_score}",
             f"{fg_status}",
+            ""
+        ])
+    except Exception as e:
+        print(f"[ERROR] Fear & Greed block failed: {e}")
+        report_lines.extend([
+            "■Fear & Greed Monitor",
+            "Fear & Greed: 取得失敗",
+            f"⚠️ FETCH FAILED ({str(e)})",
             ""
         ])
 
@@ -288,29 +276,30 @@ def build_report() -> str:
         report_lines.extend([
             "■NASDAQ100 Monitor",
             "取得失敗",
-            "⚠️ FETCH FAILED",
+            f"⚠️ FETCH FAILED ({str(e)})",
             ""
         ])
 
     # Leveraged ETFs
     report_lines.append("■Leveraged ETF Monitor")
 
-    any_success = False
+    success_count = 0
     for symbol in TARGET_TICKERS:
-        info = get_etf_info(symbol)
-        if info is None:
-            report_lines.append(f"{symbol}: 取得失敗")
-            continue
+        try:
+            info = get_etf_info(symbol)
+            success_count += 1
 
-        any_success = True
-        rsi_label = judge_rsi(info["rsi"])
-        rsi_str = "N/A" if info["rsi"] is None else f"{info['rsi']:.1f}"
+            rsi_label = judge_rsi(info["rsi"])
+            rsi_str = "N/A" if info["rsi"] is None else f"{info['rsi']:.1f}"
 
-        report_lines.append(
-            f"{symbol}: {info['price']:.2f} ({info['change_pct']:+.2f}%) / RSI: {rsi_str} [{rsi_label}]"
-        )
+            report_lines.append(
+                f"{symbol}: {info['price']:.2f} ({info['change_pct']:+.2f}%) / RSI: {rsi_str} [{rsi_label}]"
+            )
+        except Exception as e:
+            print(f"[ERROR] ETF block failed for {symbol}: {e}")
+            report_lines.append(f"{symbol}: 取得失敗 ({str(e)})")
 
-    if not any_success:
+    if success_count == 0:
         report_lines.append("⚠️ ALL ETF FETCH FAILED")
 
     return "\n".join(report_lines)
@@ -321,6 +310,8 @@ def build_report() -> str:
 # =========================
 def main() -> None:
     message = build_report()
+    print("[DEBUG] Final message:")
+    print(message)
     send_discord(message)
 
 
