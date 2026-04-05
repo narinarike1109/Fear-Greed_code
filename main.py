@@ -83,13 +83,11 @@ def get_fear_greed():
 
 def judge_vix(vix: float):
     if vix >= 35:
-        return "💀 STRONG BUY"
-    elif vix >= 28:
-        return "🔥 BUY"
-    elif vix <= 18:
-        return "💰 TAKE PROFIT"
+        return "💀 BUY NOW"
+    elif vix < 15:
+        return "💰 SELL NOW"
     else:
-        return "🙂 NORMAL"
+        return "🙂 WAIT"
 
 
 def judge_fear_greed(fg: int):
