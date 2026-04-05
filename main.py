@@ -1,13 +1,12 @@
 import os
-import re
 import requests
 import yfinance as yf
+from playwright.sync_api import sync_playwright
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 FRED_API_KEY = os.environ["FRED_API_KEY"]
 
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
-FG_URL = "https://www.finhacker.cz/en/fear-and-greed-index-historical-data-and-chart/"
 
 
 def get_fred_latest_two(series_id: str):
@@ -55,31 +54,27 @@ def get_nasdaq100():
     return latest, change_pct, market_date
 
 
+# CNN Fear & Greed 取得
 def get_fear_greed():
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
 
-    r = requests.get(FG_URL, headers=headers, timeout=15)
-    r.raise_for_status()
-    text = r.text
+    url = "https://edition.cnn.com/markets/fear-and-greed"
 
-    patterns = [
-        r"as of ([A-Za-z0-9 ,]+?) is (\d+)\s*-\s*([A-Za-z ]+)",
-        r"current value of the Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
-        r"Fear & Greed Index.*?is\s+(\d+)\s*-\s*([A-Za-z ]+)",
-        r"(\d+)\s*-\s*(Extreme Fear|Fear|Neutral|Greed|Extreme Greed)",
-    ]
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
 
-    for pattern in patterns:
-        m = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-        if m:
-            if len(m.groups()) == 3:
-                return int(m.group(2)), m.group(3).strip().title(), m.group(1).strip()
-            elif len(m.groups()) == 2:
-                return int(m.group(1)), m.group(2).strip().title(), None
+        page = browser.new_page(
+            user_agent="Mozilla/5.0"
+        )
 
-    raise ValueError("Fear and Greed Value not found")
+        page.goto(url, wait_until="domcontentloaded")
+
+        fg_text = page.locator(
+            ".market-fng-gauge__dial-number-value"
+        ).inner_text()
+
+        browser.close()
+
+    return int(fg_text)
 
 
 def get_etf_change(symbol: str):
@@ -103,6 +98,7 @@ def get_etf_change(symbol: str):
 
 
 def judge_vix(vix: float):
+
     if vix >= 35:
         return "💀 BUY NOW"
     elif vix < 15:
@@ -112,6 +108,7 @@ def judge_vix(vix: float):
 
 
 def judge_fear_greed(fg: int):
+
     if fg <= 10:
         return "🚨 IMMEDIATE BUY NOW"
     elif fg <= 20:
@@ -127,43 +124,44 @@ def judge_fear_greed(fg: int):
 
 
 def send_discord(message: str):
+
     r = requests.post(
         WEBHOOK_URL,
         json={"content": message},
         timeout=10,
     )
+
     r.raise_for_status()
 
 
 def main():
+
     # VIX
     vix, vix_date = get_vix()
     vix_status = judge_vix(vix)
 
     # Fear & Greed
     try:
-        fg, fg_state, fg_date = get_fear_greed()
+
+        fg = get_fear_greed()
         fg_status = judge_fear_greed(fg)
 
-        if fg_date:
-            fg_block = f"""■Fear & Greed Monitor
-time: {fg_date}
-Fear & Greed: {fg} ({fg_state})
+        fg_block = f"""■Fear & Greed Monitor
+Fear & Greed: {fg}
 {fg_status}"""
-        else:
-            fg_block = f"""■Fear & Greed Monitor
-Fear & Greed: {fg} ({fg_state})
-{fg_status}"""
-    except Exception:
-        fg_block = """■Fear & Greed Monitor
+
+    except Exception as e:
+
+        fg_block = f"""■Fear & Greed Monitor
 Fear & Greed: 取得失敗
-⚠️ FETCH FAILED"""
+⚠️ FETCH FAILED ({str(e)})"""
 
     # NASDAQ100
     _, nasdaq_change, market_date = get_nasdaq100()
 
     # Leveraged ETFs
     try:
+
         spxl_price, spxl_change = get_etf_change("SPXL")
         soxl_price, soxl_change = get_etf_change("SOXL")
         tecl_price, tecl_change = get_etf_change("TECL")
@@ -172,7 +170,9 @@ Fear & Greed: 取得失敗
 SPXL: {spxl_price:.2f} ({spxl_change:+.2f}%)
 SOXL: {soxl_price:.2f} ({soxl_change:+.2f}%)
 TECL: {tecl_price:.2f} ({tecl_change:+.2f}%)"""
+
     except Exception as e:
+
         etf_block = f"""■Leveraged ETF Monitor
 取得失敗
 ⚠️ FETCH FAILED ({str(e)})"""
